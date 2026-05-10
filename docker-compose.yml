@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+
+  app:
+    build: .
+    container_name: myclothes-app
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      SESSION_SECRET: dev-secret-change-in-production
+      # MySQL (maps to RDS on AWS)
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_USER: root
+      DB_PASSWORD: password
+      DB_NAME: myclothes
+      # Redis (maps to ElastiCache on AWS)
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - myclothes-net
+
+  mysql:
+    image: mysql:8.0
+    container_name: myclothes-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: myclothes
+      MYSQL_CHARACTER_SET_SERVER: utf8mb4
+      MYSQL_COLLATION_SERVER: utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    ports:
+      - "3306:3306"
+    restart: unless-stopped
+    networks:
+      - myclothes-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: myclothes-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - myclothes-net
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  myclothes-net:
+    driver: bridge
